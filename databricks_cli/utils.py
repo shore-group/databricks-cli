@@ -24,7 +24,10 @@
 import sys
 import time
 import traceback
-from StringIO import StringIO
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
 from multiprocessing import Event, Process
 from json import dumps as json_dumps, loads as json_loads
 
