@@ -126,7 +126,7 @@ class WorkspaceApi(object):
         self.client.delete(workspace_path, is_recursive, headers=headers)
 
     def import_workspace_dir(self, source_path, target_path, overwrite, exclude_hidden_files,
-                             headers=None):
+                             headers=None, verbose=True):
         # pylint: disable=too-many-locals
         filenames = os.listdir(source_path)
         if exclude_hidden_files:
@@ -135,7 +135,8 @@ class WorkspaceApi(object):
         try:
             self.mkdirs(target_path, headers=headers)
         except HTTPError as e:
-            click.echo(e.response.json())
+            if verbose:
+                click.echo(e.response.json())
             return
         for filename in filenames:
             cur_src = os.path.join(source_path, filename)
@@ -143,7 +144,7 @@ class WorkspaceApi(object):
             cur_dst = target_path.rstrip('/') + '/' + filename
             if os.path.isdir(cur_src):
                 self.import_workspace_dir(cur_src, cur_dst, overwrite, exclude_hidden_files,
-                                          headers=headers)
+                                          headers=headers, verbose=verbose)
             elif os.path.isfile(cur_src):
                 ext = WorkspaceLanguage.get_extension(cur_src)
                 if ext != '':
@@ -151,16 +152,21 @@ class WorkspaceApi(object):
                     (language, file_format) = WorkspaceLanguage.to_language_and_format(cur_src)
                     self.import_workspace(cur_src, cur_dst, language, file_format, overwrite,
                                           headers=headers)
-                    click.echo('{} -> {}'.format(cur_src, cur_dst))
+                    if verbose:
+                        click.echo('{} -> {}'.format(cur_src, cur_dst))
                 else:
                     extensions = ', '.join(WorkspaceLanguage.EXTENSIONS)
-                    click.echo(('{} does not have a valid extension of {}. Skip this file and ' +
-                                'continue.').format(cur_src, extensions))
+                    if verbose:
+                        click.echo(('{} does not have a valid extension of {}. '
+                                    + 'Skip this file and continue.')
+                                   .format(cur_src, extensions))
 
-    def export_workspace_dir(self, source_path, target_path, overwrite, headers=None):
+    def export_workspace_dir(self, source_path, target_path, overwrite,
+                             headers=None, verbose=True):
         if os.path.isfile(target_path):
-            click.echo('{} exists as a file. Skipping this subtree {}'
-                       .format(target_path, source_path))
+            if verbose:
+                click.echo('{} exists as a file. Skipping this subtree {}'
+                           .format(target_path, source_path))
             return
         if not os.path.isdir(target_path):
             os.makedirs(target_path)
@@ -168,14 +174,19 @@ class WorkspaceApi(object):
             cur_src = obj.path
             cur_dst = os.path.join(target_path, obj.basename)
             if obj.is_dir:
-                self.export_workspace_dir(cur_src, cur_dst, overwrite, headers=headers)
+                self.export_workspace_dir(cur_src, cur_dst, overwrite,
+                                          headers=headers, verbose=verbose)
             elif obj.is_notebook:
                 cur_dst = cur_dst + WorkspaceLanguage.to_extension(obj.language)
                 try:
                     self.export_workspace(cur_src, cur_dst, WorkspaceFormat.SOURCE, overwrite,
                                           headers=headers)
-                    click.echo('{} -> {}'.format(cur_src, cur_dst))
+                    if verbose:
+                        click.echo('{} -> {}'.format(cur_src, cur_dst))
                 except LocalFileExistsException:
-                    click.echo('{} already exists locally as {}. Skip.'.format(cur_src, cur_dst))
+                    if verbose:
+                        click.echo('{} already exists locally as {}. Skip.'
+                                   .format(cur_src, cur_dst))
             else:
-                click.echo('{} is neither a dir or a notebook. Skip.'.format(cur_src))
+                if verbose:
+                    click.echo('{} is neither a dir or a notebook. Skip.'.format(cur_src))
