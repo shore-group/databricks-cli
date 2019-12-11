@@ -22,7 +22,10 @@
 # limitations under the License.
 
 import sys
+import time
 import traceback
+from StringIO import StringIO
+from multiprocessing import Event, Process
 from json import dumps as json_dumps, loads as json_loads
 
 import click
@@ -99,3 +102,64 @@ class InvalidConfigurationError(RuntimeError):
              'Please configure by entering '
              '`{argv} configure --profile {profile}`').format(
                 profile=profile, argv=sys.argv[0]))
+
+
+class LoadingBar(object):
+
+    @staticmethod
+    def _displayer(msg, interval, width, fill_char, stop_event):
+        bar = ' ' * width          # pylint: disable=C0102
+        bars = []
+        for i in range(width):
+            bars.append(bar[:i] + fill_char + bar[i + 1:])
+        bars += list(reversed(bars[1:-1]))
+        n = len(bars)
+        i = 0
+        while True:
+            if stop_event.is_set():
+                sys.stdout.write('\n')
+                return
+            sys.stdout.write('\r{} [{}]'.format(msg, bars[i]))
+            sys.stdout.flush()
+            i = (i + 1) % n
+            time.sleep(interval)
+
+    def __init__(self, msg='Loading', interval=.5, width=7, fill_char='.'):
+        self.original_stdout = sys.stdout
+        self.dummy_stdout = StringIO()
+        self.stop_event = Event()
+        self.displayer = Process(
+            target=self._displayer,
+            args=(msg, interval, width, fill_char, self.stop_event))
+
+    def __enter__(self):
+        self.displayer.start()
+        sys.stdout = self.dummy_stdout
+
+    def __exit__(self, exc_type, exc_value, tb):
+        self.stop_event.set()
+        self.displayer.join()
+        sys.stdout = self.original_stdout
+        self.dummy_stdout.close()
+
+
+def loadingbar(msg='Loading', interval=.5, width=7, fill_char='.'):
+    """This function creates a context manager that when entered, begins
+    displaying an animated loading bar while some code runs.
+    The loading bar will be dismissed when 'with-block' for the context
+    manager exits.
+
+    Example usage::
+
+        with loadingbar():
+            some_indeterminite_length_task()
+
+        with loadingbar(msg='Downloading', width=9, interval=.25, fill_char='#'):
+            some_indeterminite_length_task()
+
+    :param msg: The text to display near the bar.
+    :param interval: The interval in seconds at which the animation will update.
+    :param width: The width in characters of the loading animation.
+    :param fill_char: The character to use in the loading bar.
+    """
+    return LoadingBar(msg=msg, interval=interval, width=width, fill_char=fill_char)
