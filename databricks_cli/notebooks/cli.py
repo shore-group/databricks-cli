@@ -11,6 +11,10 @@ from databricks_cli.workspace.api import WorkspaceApi
 
 def _get_repo_path_and_name():
     path = subprocess.check_output(["git", "rev-parse", "--show-toplevel"])
+    try:
+        path = path.decode('utf-8')
+    except AttributeError:
+        pass
     path = path.strip()
     name = path.split("/")[-1]
     return path, name
